@@ -40,38 +40,58 @@ func (f *Forwarder) copyData(dst io.Writer, src io.Reader, timeout time.Duration
 }
 
 // doAuth 执行认证逻辑
-func (f *Forwarder) doAuth(conn net.Conn, reader *bufio.Reader) (bool, error) {
+func (f *Forwarder) doAuth(conn net.Conn, reader *bufio.Reader) (bool, []byte, error) {
 	// 设置认证超时
 	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 
-	// 尝试读取第一行数据（Peek 不会消耗缓冲区数据，但 ReadString 会）
-	// 为了简单起见，我们直接 ReadString，之后在 handleConnection 中使用这个 reader
-	line, err := reader.ReadString('\n')
+	var readData []byte
+
+	// 1. 读取第一行，判断是否是 HTTP 请求
+	firstLine, err := reader.ReadString('\n')
 	if err != nil {
-		return false, err
+		return false, nil, err
+	}
+	readData = append(readData, []byte(firstLine)...)
+
+	isHTTP := strings.Contains(firstLine, "HTTP/")
+	
+	// 2. 检查第一行是否直接包含认证信息（兼容某些非标准客户端）
+	trimmedFirstLine := strings.TrimSpace(firstLine)
+	if f.auth.Verify(trimmedFirstLine) {
+		return true, readData, nil
 	}
 
-	trimmedLine := strings.TrimSpace(line)
+	// 3. 如果是 HTTP 请求，继续读取头部寻找 Authorization 字段
+	if isHTTP {
+		// 循环读取每一行头部
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				break
+			}
+			readData = append(readData, []byte(line)...)
+			
+			line = strings.TrimSpace(line)
+			if line == "" {
+				// 头部读取结束，仍未找到认证信息
+				break
+			}
 
-	// 1. 检查是否是 HTTP 请求并包含 Authorization 头部
-	if strings.Contains(line, "Authorization: Basic ") {
-		parts := strings.Split(line, " ")
-		for i, p := range parts {
-			if strings.HasPrefix(p, "Basic") && i+1 < len(parts) {
-				if f.auth.Verify(parts[i+1]) {
-					return true, nil
+			if strings.HasPrefix(line, "Authorization: Basic ") {
+				authBase64 := strings.TrimPrefix(line, "Authorization: Basic ")
+				if f.auth.Verify(authBase64) {
+					return true, readData, nil
+				}
+			}
+			if strings.HasPrefix(line, "Proxy-Authorization: Basic ") {
+				authBase64 := strings.TrimPrefix(line, "Proxy-Authorization: Basic ")
+				if f.auth.Verify(authBase64) {
+					return true, readData, nil
 				}
 			}
 		}
-	}
 
-	// 2. 尝试直接验证整行（兼容某些简单客户端直接发送 base64）
-	if f.auth.Verify(trimmedLine) {
-		return true, nil
-	}
-
-	// 3. 如果是 HTTP 请求但认证失败，发送 401 挑战
-	if strings.Contains(line, "HTTP/") {
+		// 4. 仍未认证成功，发送 401 挑战
 		challenge := fmt.Sprintf("HTTP/1.1 401 Unauthorized\r\n" +
 			"WWW-Authenticate: Basic realm=\"%s\"\r\n" +
 			"Content-Type: text/plain\r\n" +
@@ -80,7 +100,9 @@ func (f *Forwarder) doAuth(conn net.Conn, reader *bufio.Reader) (bool, error) {
 		conn.Write([]byte(challenge))
 	}
 
-	return false, nil
+	return false, readData, nil
 }
+
+
 
 

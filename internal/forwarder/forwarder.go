@@ -2,6 +2,7 @@ package forwarder
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -117,7 +118,7 @@ func (f *Forwarder) handleConnection(localConn net.Conn) {
 	// 认证检查
 	if f.config.EnableAuth {
 		reader := bufio.NewReader(localConn)
-		ok, err := f.doAuth(localConn, reader)
+		ok, readData, err := f.doAuth(localConn, reader)
 		if !ok {
 			metrics.IncAuthFailures()
 			if err != nil && err != io.EOF {
@@ -127,8 +128,8 @@ func (f *Forwarder) handleConnection(localConn net.Conn) {
 			}
 			return
 		}
-		// 认证成功，确保已读取的数据（在 reader 缓冲区中）能被转发
-		localReader = reader
+		// 认证成功，确保已读取的数据（readData 和 reader 缓冲区中剩余的数据）能被转发
+		localReader = io.MultiReader(bytes.NewReader(readData), reader)
 	}
 
 	// 获取目标连接
