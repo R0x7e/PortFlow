@@ -1,8 +1,10 @@
 package forwarder
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"portflow/internal/auth"
 	"portflow/internal/config"
@@ -110,13 +112,23 @@ func (f *Forwarder) handleConnection(localConn net.Conn) {
 	f.workerSem <- struct{}{}
 	defer func() { <-f.workerSem }()
 
+	var localReader io.Reader = localConn
+
 	// 认证检查
 	if f.config.EnableAuth {
-		if !f.doAuth(localConn) {
+		reader := bufio.NewReader(localConn)
+		ok, err := f.doAuth(localConn, reader)
+		if !ok {
 			metrics.IncAuthFailures()
-			logger.Warn("Authentication failed for connection from %s", localConn.RemoteAddr())
+			if err != nil && err != io.EOF {
+				logger.Error("Auth error from %s: %v", localConn.RemoteAddr(), err)
+			} else {
+				logger.Warn("Authentication failed for connection from %s", localConn.RemoteAddr())
+			}
 			return
 		}
+		// 认证成功，确保已读取的数据（在 reader 缓冲区中）能被转发
+		localReader = reader
 	}
 
 	// 获取目标连接
@@ -130,11 +142,11 @@ func (f *Forwarder) handleConnection(localConn net.Conn) {
 
 	// 设置读写超时
 	rwTimeout := time.Duration(f.config.RWTimeout) * time.Second
-	
+
 	// 双向转发
 	errChan := make(chan error, 2)
+	go f.copyData(targetConn, localReader, rwTimeout, errChan)
 	go f.copyData(localConn, targetConn, rwTimeout, errChan)
-	go f.copyData(targetConn, localConn, rwTimeout, errChan)
 
 	// 等待任一方向结束或错误
 	select {
@@ -144,3 +156,4 @@ func (f *Forwarder) handleConnection(localConn net.Conn) {
 		return
 	}
 }
+

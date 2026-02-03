@@ -15,6 +15,7 @@ type Config struct {
 	EnableAuth    bool   // 是否启用认证
 	AuthUser      string // 认证用户名
 	AuthPass      string // 认证密码
+	AuthRealm     string // 认证 Realm
 	LogLevel      string // 日志级别
 	ConnectTimeout int    // 连接建立超时时间（秒）
 	RWTimeout      int    // 读写超时时间（秒）
@@ -32,6 +33,7 @@ func LoadConfig() (*Config, error) {
 	flag.BoolVar(&cfg.EnableAuth, "auth", false, "Enable HTTP Basic authentication")
 	flag.StringVar(&cfg.AuthUser, "user", "", "Authentication username")
 	flag.StringVar(&cfg.AuthPass, "pass", "", "Authentication password")
+	flag.StringVar(&cfg.AuthRealm, "auth-realm", "PortFlow", "Authentication realm")
 	flag.StringVar(&cfg.LogLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 	flag.IntVar(&cfg.ConnectTimeout, "conn-timeout", 30, "Connection timeout in seconds")
 	flag.IntVar(&cfg.RWTimeout, "rw-timeout", 60, "Read/Write timeout in seconds")
