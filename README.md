@@ -5,6 +5,8 @@
 ![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows%20%7C%20Darwin-blue)
 ![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen)
 
+English | [简体中文](README.zh-CN.md)
+
 A high-performance, production-grade TCP port forwarding tool written in Go.
 
 ## Features

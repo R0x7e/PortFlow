@@ -5,6 +5,8 @@
 ![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows%20%7C%20Darwin-blue)
 ![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen)
 
+[English](README.md) | 简体中文
+
 一个基于 Go 语言开发的高性能、生产级 TCP 端口转发工具。
 
 ## 功能特性
